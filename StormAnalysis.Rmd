@@ -1,0 +1,116 @@
+---
+title: "Impact of Weather events on Population and Properties across US"
+author: "khsarma"
+date: "June 17, 2018"
+output:
+  html_document:
+    theme: cosmo
+  pdf_document: default
+subtitle: Analysis based on NOAA Storm Database
+---
+
+## Synopsis
+Goal of this assignment is to explore the NOAA Storm Database and answer below questions:
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+2. Across the United States, which types of events have the greatest economic consequences?
+It is observed that:
+1. Most harmful events to population health, wrt. both fatalities and injuries, are Tornadoes.
+2. Floods are the events which have greatest economic consequences based on Total damage (Dollars) wrt. both Property and Crop damages.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r, include = FALSE, results = FALSE}
+library(ggplot2)
+library(data.table)
+```
+## Data Pre-Processing
+### Import the csv as Datatable using fread
+We are going to use fread to read the CSV file into a data.table
+``` {r, cache = TRUE, results = FALSE}
+stormData <- data.table(fread("StormData.csv", header = TRUE, sep = ","))
+```
+Number of records in the file: `r nrow(stormData)`  
+Number of columns in the file: `r ncol(stormData)`  
+Number of Unique Weather Events: `r length(unique(stormData$EVTYPE))`
+
+### Subsetting stormData data set - To get fatalities data grouped by weather event type
+Group by event types and sum up the fatalities to get total fatalities for each event
+``` {r}
+popFatal <- stormData[,.(FATALITIES = sum(FATALITIES)), by = EVTYPE][order(-FATALITIES)]
+```
+### Subsetting stormData data set - To get injuries data grouped by weather event type
+Group by event types and sum up the injuries to get total injuries for each event
+``` {r}
+popInjury <- stormData[,.(INJURIES = sum(INJURIES)), by = EVTYPE][order(-INJURIES)]
+```
+### Subsetting stormData data set - To get property damages data grouped by weather event type
+Property and Crop damages are reported separately. Damages cost is expressed in Thousand or Million or Billion dollars.
+``` {r}
+propDamage <- stormData[,c(8,25,26,27,28)]
+propDamage[,PROPDMG := PROPDMG][PROPDMGEXP == 'K', 
+            PROPDMG := PROPDMG*1000][PROPDMGEXP %in% c('M','m'), 
+            PROPDMG := PROPDMG*1000000][PROPDMGEXP == 'B', 
+                                        PROPDMG := PROPDMG*1000000000]
+propDamage[,CROPDMG := CROPDMG][CROPDMGEXP %in% c('K','k'), 
+            CROPDMG := CROPDMG*1000][CROPDMGEXP %in% c('M','m'),
+            CROPDMG := CROPDMG*1000000][CROPDMGEXP == 'B', 
+            CROPDMG := CROPDMG*1000000000]
+```
+We are going to find the events which caused highest damage based on both property and crop. Below code sums up the property damages and crop damages based on each weather event:
+``` {r}
+propDamage[,TOTALDMG := (PROPDMG + CROPDMG)]
+totalPropDmg <- propDamage[,.(Damage = sum(TOTALDMG)), by = EVTYPE][order(-Damage)]
+```
+
+## Results
+### Question 1: Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+We are going to find harmful events for population fatalities and injuries seprately. Please note that only top 10 events are considered.
+#### Fatalities
+Below is the summary of events based on total number of fatalities for each type of event.
+``` {r}
+head(popFatal, 10)
+```
+```{r}
+ggplot(popFatal[1:10], aes(x = reorder(EVTYPE,FATALITIES), y = FATALITIES)) + 
+      geom_bar(stat = "identity") + 
+      ggtitle("Top 10 Weather Events by Fatalities") + 
+      labs(x = "Event Type", y = "Fatalities") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+            plot.title = element_text(hjust = 0.5)) 
+```  
+
+It can be observed that Tornadoes caused highest number of fatalities across the US.
+
+#### Injuries
+Below is the summary of events based on total number of injuries for each type of event.
+``` {r}
+head(popInjury, 10)
+```
+```{r}
+ggplot(popInjury[1:10], aes(x = reorder(EVTYPE,INJURIES), y = INJURIES)) + 
+  geom_bar(stat = "identity") + 
+  ggtitle("Top 10 Weather Events by Injuries") + 
+  labs(x = "Event Type", y = "Injuries") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) 
+```  
+
+It can be observed that Tornadoes caused highest number of injuries across the US.
+
+### Question 2: Across the United States, which types of events have the greatest economic consequences?
+We have analyzed damages of property and crops in the data pre-processing section - by summing up the damages to find out the Total damages caused for each weather event type. Below is the summary:
+``` {r}
+head(totalPropDmg, 10)
+```
+``` {r}
+ggplot(totalPropDmg[1:10], aes(x = reorder(EVTYPE,Damage), y = Damage/10^9)) + 
+  geom_bar(stat = "identity") + 
+  ggtitle("Top 10 Weather Events by Damages to Property and Crop") + 
+  labs(x = "Event Type", y = "Damages (in Billion $s)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5)) 
+```  
+
+It can be observed that Floods are major events that caused damages to property and crops.
